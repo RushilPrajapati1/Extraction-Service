@@ -1,0 +1,20 @@
+{
+  "name": "webhook-service",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Webhook delivery for the document extraction pipeline: signing, retries, delivery tracking.",
+  "scripts": {
+    "dev": "node --watch src/index.ts",
+    "start": "node src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.0"
+  }
+}
