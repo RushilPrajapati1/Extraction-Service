@@ -54,14 +54,36 @@ INVOICE_SCHEMA = {
             },
         },
     },
-    "required": ["vendor_name", "invoice_date", "total", "confidence"],
+    # subtotal and line_items are required because validation depends on
+    # them: without one of the two there is nothing to reconcile the
+    # total against, and the arithmetic checks silently can't run.
+    # Marking them required doesn't force the model's hand (open models
+    # treat schemas loosely), but it measurably improves the hit rate --
+    # and validate.py penalizes what's still missing.
+    "required": [
+        "vendor_name",
+        "invoice_date",
+        "total",
+        "subtotal",
+        "line_items",
+        "confidence",
+    ],
 }
 
 SYSTEM_PROMPT = (
     "You extract structured data from invoice text. Return ONLY JSON matching "
-    "the given schema -- no prose, no markdown fences. If a field isn't present "
-    "in the text, omit it or use null rather than guessing, and reflect that "
-    "with a low confidence score for that field."
+    "the given schema -- no prose, no markdown fences.\n"
+    "\n"
+    "Include EVERY field the schema requires. In particular:\n"
+    "- line_items: one entry per billed line, each with its amount.\n"
+    "- subtotal: the pre-tax total. If the invoice doesn't print one, add up "
+    "the line item amounts and use that.\n"
+    "- tax: the tax amount. Use 0 if the invoice shows no tax.\n"
+    "- confidence: a score from 0.0 to 1.0 for EVERY field listed in the "
+    "confidence object, not just the ones you're sure about.\n"
+    "\n"
+    "If a value genuinely isn't in the text, use null rather than inventing "
+    "one, and give that field a low confidence score."
 )
 
 

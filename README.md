@@ -111,16 +111,37 @@ and inspect webhook deliveries.
 Human corrections are stored in `reviewed_data`, **separately** from the model's
 `extracted_data`. The diff between them is the signal for improving prompts.
 
+## Unverifiable is not valid
+
+The subtle failure mode in a validation layer is guarding every rule on
+`if value is not None` — a model that omits the fields a rule needs then scores
+identically to one that reconciled perfectly. Absence of evidence reads as
+evidence of correctness.
+
+`validate.py` avoids this three ways:
+
+1. **Derive what can be derived, from independent evidence.** A missing
+   `subtotal` is recovered by summing `line_items`. Deriving it as `total - tax`
+   would be circular — the subsequent `subtotal + tax == total` check could never
+   fail, so it would look like verification while proving nothing.
+2. **Track what couldn't be checked.** `checks_run` and `checks_skipped` are on
+   every result, and skipped checks cost confidence.
+3. **Gate on the critical check.** Reconciling the total is *the* check on a
+   financial document. If it couldn't run, the document goes to review no matter
+   how confident the model claims to be — otherwise a model that rates itself
+   1.0 everywhere buys its way past an unverified total, which is backwards:
+   self-reported confidence is the thing under scrutiny.
+
 ## Known limitations
 
 These are deliberate, not oversights — they're the seams where this would grow
 into something production-shaped.
 
-- **The local model under-fills the schema.** Mistral routinely omits `subtotal`
-  and only scores some confidence fields. Because validation guards on
-  `is not None`, the `subtotal + tax == total` rule often doesn't run at all —
-  the strongest check is frequently inert. Fixing this means either requiring
-  `subtotal` in the schema or deriving it.
+- **The local model still under-fills the schema.** Mistral often skips
+  confidence scores for some fields, and mis-reads line items. Validation now
+  catches this rather than ignoring it (see *Unverifiable is not valid* below),
+  but the extraction quality itself is unimproved — that's a prompt/model
+  problem, not a validation one.
 - **Event delivery isn't durable.** If webhook-service is down when a document
   finishes, that event is lost. A real system writes to an outbox table in the
   same transaction as the status update, then drains it separately.

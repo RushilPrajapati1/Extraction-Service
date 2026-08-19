@@ -10,26 +10,26 @@ sense because you'll know what it's doing *for* you.
 One table: `documents`. One row per uploaded file, tracking it through
 the ingestion pipeline.
 
-    id            TEXT PRIMARY KEY   -- uuid4, generated at upload time
-    filename      TEXT               -- original filename from the client
-    content_type  TEXT               -- MIME type reported by the client
-    size_bytes    INTEGER
-    storage_path  TEXT               -- where the raw PDF lives on disk
-    status         TEXT              -- 'uploaded'   queued, waiting for a worker
-                                      -- 'processing' a worker owns it (the only in-flight
-                                      --              state, and the only one the stale
-                                      --              sweeper reclaims)
-                                      -- 'needs_review' | 'completed' | 'failed'  terminal
+    id             TEXT PRIMARY KEY  -- uuid4, generated at upload time
+    filename       TEXT              -- original filename from the client
+    content_type   TEXT              -- MIME type reported by the client
+    size_bytes     INTEGER
+    storage_path   TEXT              -- where the raw PDF lives on disk
+    status         TEXT              -- 'uploaded'     queued, waiting for a worker
+                                     -- 'processing'   a worker owns it (the only
+                                     --                in-flight state, and the only one
+                                     --                the stale sweeper reclaims)
+                                     -- 'needs_review' | 'completed' | 'failed'  terminal
     raw_text       TEXT              -- nullable; filled in during processing. Non-null
-                                      --   means text extraction succeeded, which is why
-                                      --   there's no separate 'text_extracted' status.
+                                     --   means text extraction succeeded, which is why
+                                     --   there's no separate 'text_extracted' status.
     extracted_data TEXT              -- nullable; JSON string, the LLM's structured output
-                                      --   (see llm_extract.extract_invoice)
+                                     --   (see llm_extract.extract_invoice)
     confidence     REAL              -- nullable; 0.0-1.0, from validate.validate_invoice
     needs_review   INTEGER           -- nullable; 0/1, from validate.validate_invoice
     reviewed_data  TEXT              -- nullable; JSON string, the human-corrected version.
-                                      --   Kept separate from extracted_data on purpose: the
-                                      --   diff between them is the signal for tuning prompts.
+                                     --   Kept separate from extracted_data on purpose: the
+                                     --   diff between them is the signal for tuning prompts.
     reviewed_at    TEXT              -- nullable; ISO 8601, when a human submitted corrections
     created_at     TEXT              -- ISO 8601 timestamp
     updated_at     TEXT              -- ISO 8601 timestamp
@@ -50,10 +50,10 @@ def get_connection() -> sqlite3.Connection:
     Caller is responsible for closing it -- prefer the transaction()
     helper below, which handles commit and close for you.
     """
-    #initialize the database connection and set row_factory to sqlite3.Row2
     conn = sqlite3.connect(DB_PATH)
 
-    conn.row_factory = sqlite3.Row #implement row_factory to return rows as dict-like objects
+    # Rows come back dict-like instead of as bare tuples.
+    conn.row_factory = sqlite3.Row
 
     return conn
 
@@ -78,8 +78,8 @@ def transaction():
 
 
 def init_db() -> None:
-
-    with sqlite3.connect(DB_PATH) as conn:
+    """Create the documents table if it doesn't already exist."""
+    with transaction() as conn:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS documents (
@@ -100,8 +100,6 @@ def init_db() -> None:
             )
             """
         )
-        conn.commit()
-
 
 
 def insert_document(
@@ -114,15 +112,13 @@ def insert_document(
     """
     Insert a new row when a file is first uploaded.
 
-    Status should start as 'uploaded'. raw_text starts as NULL.
-    created_at and updated_at should both be "now" (see the datetime
-    module — datetime.now(timezone.utc).isoformat() or similar).
+    Status starts as 'uploaded' -- which is also what puts the document
+    in the work queue (see claim_next_document). raw_text starts NULL.
 
-    TODO: write a parameterized INSERT (never use f-strings/% to build
-    SQL with user-supplied values — that's how SQL injection happens,
-    even in a learning project it's worth building the habit).
+    Parameterized INSERT: never build SQL with f-strings/% and
+    user-supplied values, that's how SQL injection happens.
     """
-    #adds a new docuement within the database with the given parameters and sets the status to 'uploaded' and raw_text to NULL. It also sets the created_at and updated_at timestamps to the current UTC time. 
+    now = datetime.now(timezone.utc).isoformat()
     with transaction() as conn:
         conn.execute(
             """
@@ -136,8 +132,8 @@ def insert_document(
                 size_bytes,
                 storage_path,
                 "uploaded",
-                datetime.now(timezone.utc).isoformat(),
-                datetime.now(timezone.utc).isoformat(),
+                now,
+                now,
             ),
         )
 
@@ -145,7 +141,7 @@ def insert_document(
 def update_document_status(id: str, status: str, raw_text: str | None = None) -> None:
     """
     Update a row's status (and optionally raw_text) as it moves through
-    the pipeline. Also bump updated_at.
+    the pipeline. Also bumps updated_at.
 
     raw_text is only written when the caller actually supplies it. A
     status-only update (e.g. marking a document "failed") must not wipe
@@ -182,21 +178,12 @@ def update_document_extraction(
     Record the result of running llm_extract + validate against a
     document's raw_text, and move the record to its final status.
 
-    status will be "needs_review" or "completed" (decide which, in
-    ingest.py, based on validation_result.needs_review).
+    status is "needs_review" or "completed", decided by the caller from
+    validation_result.needs_review.
 
-    extracted_data is the LLM's structured output -- store it as a JSON
-    string (json.dumps(...)), not a Python dict; sqlite3 doesn't have a
-    native JSON column type.
-
-    confidence and needs_review come straight off the ValidationResult
-    from validate.validate_invoice (needs_review is a bool in Python but
-    sqlite3 doesn't have a BOOLEAN type -- it'll store fine as 0/1, just
-    don't be surprised when get_document() hands it back as an int).
-
-    TODO: write a parameterized UPDATE ... WHERE id = ?, same shape as
-    update_document_status above, but also setting extracted_data,
-    confidence, and needs_review. Don't forget to bump updated_at.
+    extracted_data is a JSON string (json.dumps(...)), not a dict --
+    sqlite3 has no native JSON column type. needs_review is a bool in
+    Python but stores as 0/1, so get_document() hands it back as an int.
     """
     with transaction() as conn:
         conn.execute(
@@ -324,12 +311,7 @@ def save_review(id: str, reviewed_data: str) -> None:
 
 
 def get_document(id: str) -> sqlite3.Row | None:
-    """
-    Fetch one document record by id.
-
-    TODO: SELECT * FROM documents WHERE id = ?, return the row (or None
-    if not found).
-    """
+    """Fetch one document record by id, or None if it doesn't exist."""
     with transaction() as conn:
         cursor = conn.execute(
             """

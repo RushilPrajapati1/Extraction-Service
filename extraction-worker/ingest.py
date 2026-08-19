@@ -1,14 +1,22 @@
+"""
+Extraction API -- accepts uploads and serves records.
+
+Deliberately does no pipeline work: text extraction, the LLM call, and
+validation all live in worker.py, out of the request path. This app's
+job is to take a file, put it in the queue, and answer questions about
+what's in the database.
+"""
+
 import json
 import os
 import uuid
 
-from fastapi import  FastAPI, UploadFile, File, HTTPException, Body
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-# Note: no pypdfium2 / llm_extract / validate here any more -- the API
-# doesn't do pipeline work, it only accepts files and serves records.
-# That lives in worker.py.
+# Note: no pypdfium2 / llm_extract / validate here -- the API doesn't do
+# pipeline work, it only accepts files and serves records.
 import db
 import storage
 
@@ -40,12 +48,12 @@ async def ingest(file: UploadFile = File(...)):
     Returns immediately with status 'uploaded' -- text extraction and the
     LLM call happen in worker.py, out of the request path. Poll
     GET /documents/{document_id} to watch it progress through
-    'processing' -> 'text_extracted' -> 'needs_review' | 'completed'.
+    'processing' -> 'needs_review' | 'completed'.
 
     202 Accepted rather than 200: the work has been queued, not done.
     """
     if file.content_type != "application/pdf":
-         raise HTTPException(status_code=400, detail="Invalid file type. Only PDF files are allowed.")
+        raise HTTPException(status_code=400, detail="Invalid file type. Only PDF files are allowed.")
 
     document_id = str(uuid.uuid4())
     file_bytes = await file.read()
@@ -53,7 +61,6 @@ async def ingest(file: UploadFile = File(...)):
     db.insert_document(document_id, file.filename, file.content_type, len(file_bytes), storage_path)
 
     return {"document_id": document_id, "status": "uploaded"}
-
 
 
 @app.get("/documents")
