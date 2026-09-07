@@ -8,12 +8,11 @@ what's in the database.
 """
 
 import json
-import os
 import uuid
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 
 # Note: no pypdfium2 / llm_extract / validate here -- the API doesn't do
 # pipeline work, it only accepts files and serves records.
@@ -104,13 +103,18 @@ async def get_document_file(document_id: str):
         raise HTTPException(status_code=404, detail="Document not found")
 
     storage_path = document["storage_path"]
-    if not storage_path or not os.path.exists(storage_path):
-        raise HTTPException(status_code=404, detail="Document file not found on disk")
+    if not storage.document_exists(storage_path):
+        raise HTTPException(status_code=404, detail="Document file not found in storage")
 
-    return FileResponse(
-        storage_path,
+    # Read through storage rather than handing the path to FileResponse:
+    # storage_path is an opaque handle, and on the GCS backend it's a
+    # gs:// URI that no filesystem call can resolve.
+    return Response(
+        content=storage.read_document(storage_path),
         media_type="application/pdf",
-        filename=document["filename"],
+        headers={
+            "Content-Disposition": f'inline; filename="{document["filename"]}"'
+        },
     )
 
 

@@ -34,6 +34,12 @@ Then open **http://localhost:5173**.
 Requires [Ollama](https://ollama.com) running locally with the `mistral` model
 (`ollama pull mistral`). No API keys — extraction runs entirely on your machine.
 
+### Tests
+
+```bash
+cd extraction-worker && pip install -r requirements-dev.txt && pytest
+```
+
 To run pieces individually:
 
 ```bash
@@ -68,7 +74,7 @@ watch is a status a document can get orphaned in.
 | `db.py`           | Plain sqlite3, no ORM. Every SQL statement is visible.        |
 | `llm_extract.py`  | Local Ollama call, constrained to a JSON schema.              |
 | `validate.py`     | Business rules + confidence scoring. Independent of the LLM.  |
-| `storage.py`      | Raw file storage (stands in for Cloud Storage).               |
+| `storage.py`      | Raw file storage. Local disk or GCS, via `STORAGE_BACKEND`.   |
 | `events.py`       | Publishes events to webhook-service. Never fails a document.  |
 
 **The queue is the `documents` table.** `claim_next_document()` is a single
@@ -142,12 +148,24 @@ into something production-shaped.
   catches this rather than ignoring it (see *Unverifiable is not valid* below),
   but the extraction quality itself is unimproved — that's a prompt/model
   problem, not a validation one.
+- **Only invoices.** No bank statements, no loan documents -- so the build
+  plan's claim that the schema and pipeline generalize is untested. There is
+  no `doc_type` column at all: the type is implied by the single schema in
+  `llm_extract.py`, which means routing, validation and storage all silently
+  assume "invoice".
+- **No OCR.** Text-layer PDFs only. `extract_text()` pulls the embedded text
+  layer via pypdfium2; a scanned document has none, so it yields an empty
+  string, which is then sent to the model as if it were the document. The
+  failure is silent -- the LLM hallucinates against nothing rather than the
+  pipeline reporting "this document has no readable text".
 - **Event delivery isn't durable.** If webhook-service is down when a document
   finishes, that event is lost. A real system writes to an outbox table in the
   same transaction as the status update, then drains it separately.
 - **The queue is single-machine.** SQLite polling doesn't survive being spread
-  across hosts. Swapping in Pub/Sub changes where the worker gets job IDs, not
-  the shape of the worker.
+  across hosts, and `claim_next_document()` is only safe *because* SQLite
+  serializes writers -- under Postgres MVCC the same query lets two workers
+  claim one row. Moving job state to Cloud SQL needs
+  `SELECT ... FOR UPDATE SKIP LOCKED`, not a new connection string.
 - **No auth anywhere.** CORS is pinned to localhost and there are no
   credentials on any endpoint.
 - **Line items are read-only** in the review UI — displayed and carried through,

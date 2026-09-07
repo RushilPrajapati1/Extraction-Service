@@ -32,6 +32,7 @@ import pypdfium2 as pdfium
 import db
 import events
 import llm_extract
+import storage
 import validate
 
 POLL_INTERVAL = 2.0          # seconds to sleep when the queue is empty
@@ -56,9 +57,15 @@ def _handle_signal(signum, frame):
 
 
 def extract_text(storage_path: str) -> str:
-    """Pull the text layer out of a PDF on disk."""
-    with open(storage_path, "rb") as f:
-        file_bytes = f.read()
+    """
+    Pull the text layer out of a stored PDF.
+
+    Goes through storage.read_document rather than open(): storage_path
+    is an opaque handle, and under STORAGE_BACKEND=gcs it's a gs:// URI.
+    pdfium works from bytes either way, so nothing below this line cares
+    where the document actually lives.
+    """
+    file_bytes = storage.read_document(storage_path)
 
     pdf = pdfium.PdfDocument(file_bytes)
     try:

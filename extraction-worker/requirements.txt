@@ -1,0 +1,12 @@
+# Runtime dependencies for the API and worker.
+#
+# There was no requirements file before, which is why `import ollama`
+# fails on a bare `python3` -- the working interpreter was whichever one
+# happened to have the packages installed.
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20   # FastAPI needs this for UploadFile / multipart uploads
+pypdfium2==4.30.0
+ollama==0.4.5
+requests==2.32.3           # events.py posts to webhook-service
