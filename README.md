@@ -36,9 +36,23 @@ Requires [Ollama](https://ollama.com) running locally with the `mistral` model
 
 ### Tests
 
+Unit tests for the storage seam:
+
 ```bash
 cd extraction-worker && pip install -r requirements-dev.txt && pytest
 ```
+
+End-to-end, driving the whole stack through the browser:
+
+```bash
+cd e2e && npm install && npx playwright install chromium && npm test
+```
+
+The e2e suite starts every service itself, against throwaway databases,
+with Ollama replaced by a fixture so the pipeline's behaviour is what's
+under test rather than the model's mood. `e2e/tests/known-gaps.spec.ts`
+is worth reading on its own: it states what the system *should* do where
+it currently doesn't. See [e2e/README.md](e2e/README.md).
 
 To run pieces individually:
 

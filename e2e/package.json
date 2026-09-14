@@ -1,0 +1,16 @@
+{
+  "name": "extraction-e2e",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end suite: maps the pipeline's behaviour to what it's supposed to be.",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "fixtures": "../.venv/bin/python fixtures/make_pdfs.py"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}
