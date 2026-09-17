@@ -111,6 +111,28 @@ echo ""
 echo "Logs:   gcloud compute ssh $VM --zone $ZONE -- sudo docker compose -f $REMOTE_DIR/docker-compose.yml logs -f"
 echo "Status: gcloud compute ssh $VM --zone $ZONE -- sudo docker compose -f $REMOTE_DIR/docker-compose.yml ps"
 
+# --- record it on GitHub ---------------------------------------------------
+# Like Vercel: a Deployment on the deployed commit with the live URL, which
+# shows up in the repo's "Deployments" sidebar and on the commit itself.
+# Skipped quietly when gh isn't installed or logged in.
+
+if command -v gh >/dev/null && gh auth status >/dev/null 2>&1 \
+   && REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null); then
+  SHA=$(git rev-parse HEAD)
+  DEP_ID=$(gh api "repos/$REPO/deployments" --jq .id --input - <<JSON
+{"ref":"$SHA","environment":"production","auto_merge":false,"required_contexts":[],
+ "description":"GCE VM $VM ($ZONE)"}
+JSON
+  )
+  gh api "repos/$REPO/deployments/$DEP_ID/statuses" --silent --input - <<JSON
+{"state":"success","environment_url":"http://$IP",
+ "log_url":"https://console.cloud.google.com/compute/instancesDetail/zones/$ZONE/instances/$VM?project=$PROJECT",
+ "description":"Deployed via deploy/gcp/deploy.sh"}
+JSON
+  gh repo edit --homepage "http://$IP" >/dev/null
+  echo "Recorded GitHub deployment for $SHA -> http://$IP"
+fi
+
 # GPU note: for ~10x faster extraction, create the VM with
 #   MACHINE_TYPE=n1-standard-4 and add
 #   --accelerator type=nvidia-tesla-t4,count=1 --maintenance-policy TERMINATE

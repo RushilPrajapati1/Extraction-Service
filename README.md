@@ -1,5 +1,8 @@
 # Financial Document Extraction Pipeline
 
+**Live:** http://34.121.149.224 · [API docs](http://34.121.149.224/api/docs) · [Deployments](https://github.com/RushilPrajapati1/Extraction-Service/deployments)
+*(single GCE VM, see [`deploy/gcp/deploy.sh`](deploy/gcp/deploy.sh); access is IP-restricted since the app has no auth)*
+
 Ingests PDFs, extracts structured data with a local LLM, validates it against
 business rules, routes low-confidence results to human review, and fires signed
 webhooks when documents reach a terminal state.
