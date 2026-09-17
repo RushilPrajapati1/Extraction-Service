@@ -24,6 +24,15 @@ type Tab = "documents" | "deliveries";
 /** How often to re-poll while something is still in flight. */
 const POLL_MS = 2000;
 
+/** "just now", "4 min ago", "2 h ago" -- exact time is in the tooltip. */
+function relativeTime(iso: string): string {
+  const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} h ago`;
+  return `${Math.floor(seconds / 86400)} d ago`;
+}
+
 function StatusBadge({ status }: { status: string }) {
   return <span className={`badge badge-${status}`}>{status.replace("_", " ")}</span>;
 }
@@ -84,6 +93,11 @@ export default function App() {
   const inFlightCount = documents.filter((d) => !isTerminal(d.status)).length;
   const reviewCount = documents.filter((d) => d.status === "needs_review").length;
 
+  // Surface the backlog in the tab so it's visible from another window.
+  useEffect(() => {
+    document.title = reviewCount > 0 ? `(${reviewCount}) Extraction review` : "Extraction review";
+  }, [reviewCount]);
+
   return (
     <div className="app">
       <aside className="queue">
@@ -136,6 +150,9 @@ export default function App() {
                   {doc.confidence !== null && (
                     <span className="queue-confidence">{doc.confidence.toFixed(2)}</span>
                   )}
+                  <span className="queue-time" title={new Date(doc.updated_at).toLocaleString()}>
+                    {relativeTime(doc.updated_at)}
+                  </span>
                 </span>
               </button>
               {doc.status === "failed" && (

@@ -73,6 +73,33 @@ function confidenceColor(score: number | undefined): string {
   return "#dc2626";
 }
 
+function formatMoney(value: number | undefined): string {
+  if (value === undefined || value === null) return "—";
+  return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/**
+ * The reviewer's main job is checking that the amounts add up, so do the
+ * arithmetic for them as they type. Mirrors the tolerance validate.py uses;
+ * this is a hint, not a gate -- the server still runs the real check.
+ */
+function reconcile(form: FormState): { ok: boolean; message: string } | null {
+  const subtotal = Number(form.subtotal);
+  const total = Number(form.total);
+  const tax = form.tax.trim() === "" ? 0 : Number(form.tax);
+  if (form.subtotal.trim() === "" || form.total.trim() === "") return null;
+  if ([subtotal, tax, total].some(Number.isNaN)) return null;
+
+  const diff = subtotal + tax - total;
+  if (Math.abs(diff) < 0.01) {
+    return { ok: true, message: "subtotal + tax = total" };
+  }
+  return {
+    ok: false,
+    message: `subtotal + tax is ${formatMoney(subtotal + tax)}, total says ${formatMoney(total)} (off by ${formatMoney(Math.abs(diff))})`,
+  };
+}
+
 interface Props {
   documentId: string;
   onReviewed: () => void;
@@ -83,6 +110,7 @@ export function ReviewPane({ documentId, onReviewed }: Props) {
   const [form, setForm] = useState<FormState>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +138,7 @@ export function ReviewPane({ documentId, onReviewed }: Props) {
     setError(null);
     try {
       await submitReview(documentId, toInvoiceData(form, doc.extracted_data));
+      setSavedAt(Date.now());
       onReviewed();
     } catch (e) {
       setError(String(e));
@@ -122,6 +151,8 @@ export function ReviewPane({ documentId, onReviewed }: Props) {
   if (!doc) return <div className="pane-message">Loading…</div>;
 
   const fieldConfidence = doc.extracted_data?.confidence ?? {};
+  const reconciliation = reconcile(form);
+  const original = toFormState(doc.reviewed_data ?? doc.extracted_data);
 
   return (
     <div className="review-pane">
@@ -147,15 +178,21 @@ export function ReviewPane({ documentId, onReviewed }: Props) {
 
         {FIELDS.map((field) => {
           const score = fieldConfidence[field.key];
+          const edited = (form[field.key] ?? "") !== original[field.key];
+          const lowConfidence = score === undefined || score < 0.5;
           return (
             <label key={field.key} className="field">
               <span className="field-label">
-                {field.label}
+                <span>
+                  {field.label}
+                  {edited && <span className="field-edited">edited</span>}
+                </span>
                 <span className="field-confidence" style={{ color: confidenceColor(score) }}>
                   {score === undefined ? "not scored" : score.toFixed(2)}
                 </span>
               </span>
               <input
+                className={lowConfidence ? "low-confidence" : undefined}
                 type={field.type}
                 step={field.type === "number" ? "0.01" : undefined}
                 value={form[field.key] ?? ""}
@@ -165,6 +202,13 @@ export function ReviewPane({ documentId, onReviewed }: Props) {
           );
         })}
 
+        {reconciliation && (
+          <p className={reconciliation.ok ? "reconcile ok" : "reconcile off"}>
+            {reconciliation.ok ? "✓ " : "⚠ "}
+            {reconciliation.message}
+          </p>
+        )}
+
         {doc.extracted_data?.line_items?.length ? (
           <div className="line-items">
             <h3>Line items ({doc.extracted_data.line_items.length})</h3>
@@ -172,18 +216,18 @@ export function ReviewPane({ documentId, onReviewed }: Props) {
               <thead>
                 <tr>
                   <th>Description</th>
-                  <th>Qty</th>
-                  <th>Unit</th>
-                  <th>Amount</th>
+                  <th className="num">Qty</th>
+                  <th className="num">Unit</th>
+                  <th className="num">Amount</th>
                 </tr>
               </thead>
               <tbody>
                 {doc.extracted_data.line_items.map((item, i) => (
                   <tr key={i}>
                     <td>{item.description ?? "—"}</td>
-                    <td>{item.quantity ?? "—"}</td>
-                    <td>{item.unit_price ?? "—"}</td>
-                    <td>{item.amount ?? "—"}</td>
+                    <td className="num">{item.quantity ?? "—"}</td>
+                    <td className="num">{formatMoney(item.unit_price)}</td>
+                    <td className="num">{formatMoney(item.amount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -194,9 +238,16 @@ export function ReviewPane({ documentId, onReviewed }: Props) {
           <p className="hint">The model returned no line items for this document.</p>
         )}
 
-        <button className="primary" onClick={handleSubmit} disabled={saving}>
-          {saving ? "Saving…" : "Submit review"}
-        </button>
+        <div className="review-footer">
+          <button className="primary" onClick={handleSubmit} disabled={saving}>
+            {saving ? "Saving…" : "Submit review"}
+          </button>
+          {savedAt !== null && (
+            <p key={savedAt} className="saved-note">
+              ✓ Saved — marked completed
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

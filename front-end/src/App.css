@@ -180,6 +180,38 @@ body {
   border-color: transparent;
 }
 
+/* Fields the model wasn't sure about (or didn't score) get a warm tint so
+   the reviewer's eye goes there first. */
+.field input.low-confidence {
+  border-color: #fbbf24;
+  background: #fffbeb;
+}
+
+.field-edited {
+  margin-left: 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: var(--accent);
+}
+
+.reconcile {
+  font-size: 0.75rem;
+  margin: 0 0 1.25rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reconcile.ok {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.reconcile.off {
+  background: #fffbeb;
+  color: #a16207;
+}
+
 .line-items {
   margin: 1.25rem 0;
 }
@@ -207,6 +239,12 @@ body {
   font-weight: 500;
 }
 
+.line-items .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .hint {
   font-size: 0.75rem;
   color: var(--text-muted);
@@ -228,6 +266,28 @@ button.primary {
 button.primary:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+/* Keep the submit button reachable however long the field list gets. */
+.review-footer {
+  position: sticky;
+  bottom: 0;
+  margin: 0 -1.25rem -1.25rem;
+  padding: 0.875rem 1.25rem 1.25rem;
+  background: #fff;
+  border-top: 1px solid var(--border);
+}
+
+.saved-note {
+  margin: 0.625rem 0 0;
+  font-size: 0.75rem;
+  color: #15803d;
+  text-align: center;
+  animation: fade-out 0.6s ease-in 3s forwards;
+}
+
+@keyframes fade-out {
+  to { opacity: 0; }
 }
 
 /* ---------- uploader ---------- */
@@ -342,6 +402,11 @@ button.primary:disabled {
   display: flex;
   align-items: center;
   gap: 0.375rem;
+}
+
+.queue-time {
+  margin-left: auto;
+  color: var(--text-muted);
 }
 
 .retry-link {
