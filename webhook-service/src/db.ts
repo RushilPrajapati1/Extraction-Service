@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = join(here, "..", "webhooks.db");
+const DB_PATH = process.env.WEBHOOK_DB_PATH ?? join(here, "..", "webhooks.db");
 
 export const db = new DatabaseSync(DB_PATH);
 

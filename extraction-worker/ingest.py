@@ -8,6 +8,7 @@ what's in the database.
 """
 
 import json
+import os
 import uuid
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body
@@ -22,11 +23,17 @@ import storage
 app = FastAPI()
 
 # The review UI runs on its own dev server (Vite, port 5173), so the
-# browser treats these as cross-origin requests. Wide-open CORS is fine
-# for local development; lock this down before this goes anywhere real.
+# browser treats these as cross-origin requests. In a deployment the UI
+# is served from the same origin behind a reverse proxy, so CORS_ORIGINS
+# can be left at its default and nothing else is admitted.
+CORS_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )

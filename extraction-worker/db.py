@@ -35,12 +35,15 @@ the ingestion pipeline.
     updated_at     TEXT              -- ISO 8601 timestamp
 """
 
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "ingestion.db"
+# Overridable so a deployment can point both the API and the worker at a
+# shared volume instead of the source tree.
+DB_PATH = Path(os.environ.get("INGEST_DB_PATH", Path(__file__).parent / "ingestion.db"))
 
 
 def get_connection() -> sqlite3.Connection:

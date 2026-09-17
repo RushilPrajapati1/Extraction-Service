@@ -25,7 +25,7 @@ local development doesn't require google-cloud-storage to be installed.
 import os
 from pathlib import Path
 
-UPLOAD_DIR = Path(__file__).parent / "uploads"
+UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", Path(__file__).parent / "uploads"))
 
 GCS_SCHEME = "gs://"
 

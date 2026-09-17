@@ -1,0 +1,76 @@
+# The whole pipeline on one host, which is the shape the code assumes:
+# the API and worker share a SQLite file (the queue) through the `data`
+# volume, and the worker talks to a local Ollama.
+#
+#   docker compose up -d --build
+#   open http://localhost
+#
+# First start pulls the mistral model (~4 GB); the worker waits for that.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  # One-shot: make sure the model is present before the worker starts.
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["ollama", "pull", "mistral"]
+    restart: "no"
+
+  api:
+    build: ./extraction-worker
+    environment:
+      CORS_ORIGINS: ""            # same-origin behind nginx; nothing to allow
+    volumes:
+      - data:/data
+    restart: unless-stopped
+
+  worker:
+    build: ./extraction-worker
+    command: ["python3", "worker.py"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      WEBHOOK_SERVICE_URL: http://webhook:8787
+    volumes:
+      - data:/data
+    depends_on:
+      api:
+        condition: service_started
+      ollama-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  webhook:
+    build: ./webhook-service
+    environment:
+      CORS_ORIGIN: ""
+    volumes:
+      - webhook-data:/data
+    restart: unless-stopped
+
+  ui:
+    build: ./front-end
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+      - webhook
+    restart: unless-stopped
+
+volumes:
+  data:
+  ollama:
+  webhook-data:

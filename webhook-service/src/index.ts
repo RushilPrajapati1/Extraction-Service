@@ -15,6 +15,9 @@ import { db, type Delivery, type Subscription } from "./db.ts";
 import { publish, processPending, startRetryLoop, verifySignature } from "./delivery.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
+// Origin the review UI is served from. Behind a reverse proxy it is the
+// same origin, so the header is harmless; in dev it is the Vite server.
+const CORS_ORIGIN = process.env.CORS_ORIGIN ?? "http://localhost:5173";
 const app = express();
 
 // The sink needs the raw bytes to verify the HMAC -- a signature covers
@@ -30,7 +33,7 @@ app.use(
 
 // The review UI reads the delivery log directly from this service.
 app.use((_req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "http://localhost:5173");
+  res.header("Access-Control-Allow-Origin", CORS_ORIGIN);
   res.header("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type,X-Webhook-Signature");
   next();
